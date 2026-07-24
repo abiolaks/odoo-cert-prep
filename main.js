@@ -889,17 +889,21 @@ function processPastedQuestion() {
   // Display answer verdict
   document.getElementById('paste-answer').innerHTML = `
     <div class="paste-answer-header">
-      <h3>📋 Analysis</h3>
+      <h3>📋 Analysis (relative keyword matching)</h3>
     </div>
     ${results.verdicts.map(v => `
       <div class="paste-answer-option ${v.level}">
-        <strong>${v.letter}.</strong> ${escHtml(v.text)}
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">— ${v.explanation}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span><strong>${v.letter}.</strong> ${escHtml(v.text)}</span>
+          <span class="score-badge ${v.level}">score: ${v.score} (${v.ratio}% match)</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${v.explanation}</div>
       </div>
     `).join('')}
     <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
-      <strong>Most likely answer:</strong> ${results.bestAnswer}
+      <strong>Best match:</strong> ${results.bestAnswer}
     </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ This is keyword-based matching against the knowledge base, not AI. Always verify against the official Odoo docs.</p>
   `;
 
   // Display evidence
@@ -912,7 +916,7 @@ function processPastedQuestion() {
           <div class="evidence-text">${highlightText(e.snippet, parsed.question.split(' ').slice(0, 3).join(' '))}</div>
         </div>
       `).join('')
-      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question.</p>'}
+      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question or checking the official Odoo docs directly.</p>'}
   `;
 }
 
@@ -954,62 +958,139 @@ function parseQuestionText(text) {
 }
 
 function evaluateOptions(parsed) {
-  const questionWords = parsed.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const verdicts = [];
-  let allEvidence = [];
+  const questionLower = parsed.question.toLowerCase();
+  const questionWords = questionLower.split(/\s+/).filter(w => w.length > 3);
 
-  parsed.options.forEach((optionText, idx) => {
+  // Score each option individually against the KB
+  const scored = parsed.options.map((optionText, idx) => {
     const letter = String.fromCharCode(65 + idx);
-    const optWords = optionText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    const searchTerms = [...new Set([...questionWords, ...optWords])];
-    const evidence = searchKBForTerms(searchTerms, optionText);
+    const optLower = optionText.toLowerCase();
+    const evidence = searchKBForTerms(questionLower, optLower);
 
-    if (evidence.length > 0) {
-      allEvidence = allEvidence.concat(evidence);
-      const score = evidence.reduce((s, e) => s + e.score, 0);
-      if (score >= 5) {
-        verdicts.push({ letter, text: optionText, level: 'likely', explanation: 'Strong support in documentation', score });
-      } else if (score >= 2) {
-        verdicts.push({ letter, text: optionText, level: 'likely', explanation: 'Partial support in documentation', score });
+    // Compute a meaningful score based on evidence quality
+    const totalScore = evidence.reduce((s, e) => s + e.score, 0);
+    return { letter, text: optionText, evidence, totalScore };
+  });
+
+  // Find the maximum score to compute relative confidence
+  const maxScore = Math.max(...scored.map(s => s.totalScore), 1);
+
+  // Classify options by how they compare to the top scorer
+  const verdicts = scored.map(s => {
+    let level, explanation;
+    // Normalize: option's score as a fraction of the best option's score
+    const ratio = s.totalScore / maxScore;
+
+    if (s.totalScore === 0) {
+      level = 'no-evidence';
+      explanation = 'No documentation found for this option';
+    } else if (ratio >= 0.7) {
+      // Close to or equal to the top scorer — this is competitive
+      if (s.evidence.length >= 2) {
+        level = 'likely';
+        explanation = 'Strong match — multiple documentation sources support this';
       } else {
-        verdicts.push({ letter, text: optionText, level: 'unlikely', explanation: 'Weak or no direct support', score });
+        level = 'likely';
+        explanation = 'Best match in documentation';
       }
+    } else if (ratio >= 0.3) {
+      level = 'unlikely';
+      explanation = 'Some keyword matches, but weaker than the top option(s)';
     } else {
-      verdicts.push({ letter, text: optionText, level: 'no-evidence', explanation: 'No supporting evidence found', score: 0 });
+      level = 'no-evidence';
+      explanation = 'Minimal or no evidence found';
     }
+
+    return { letter: s.letter, text: s.text, level, explanation, score: s.totalScore, ratio: Math.round(ratio * 100) };
   });
 
-  // Deduplicate evidence
+  // Deduplicate and collect all evidence from top-scoring options
   const seen = new Set();
-  const uniqueEvidence = allEvidence.filter(e => {
-    const key = e.module + e.topic;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const uniqueEvidence = [];
+  const topOptions = scored.filter(s => s.totalScore > 0).sort((a, b) => b.totalScore - a.totalScore);
+  for (const s of topOptions) {
+    for (const e of s.evidence) {
+      const key = e.module + e.topic;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueEvidence.push(e);
+      }
+    }
+  }
 
-  const likely = verdicts.filter(v => v.level === 'likely');
-  const bestAnswer = likely.length > 0
-    ? likely.map(v => v.letter).join(', ')
-    : 'Could not determine confidently. Study the evidence below.';
+  // Best answer: only the highest-scoring option or options (within 10% of top)
+  const best = scored.filter(s => s.totalScore > 0).sort((a, b) => b.totalScore - a.totalScore);
+  let bestAnswer;
+  if (best.length === 0) {
+    bestAnswer = 'Could not determine — no matching evidence in the knowledge base. Try rephrasing or checking the official Odoo docs.';
+  } else {
+    const topScore = best[0].totalScore;
+    const topGroup = best.filter(s => s.totalScore >= topScore * 0.9);
+    if (topGroup.length === 1) {
+      bestAnswer = `${topGroup[0].letter}. ${topGroup[0].text} (score: ${topGroup[0].totalScore})`;
+    } else {
+      bestAnswer = topGroup.map(s => `${s.letter}. ${s.text}`).join('  |  ') + ` (scores: ${topGroup.map(s => s.totalScore).join('/')})`;
+    }
+  }
 
-  return { verdicts, evidence: uniqueEvidence, bestAnswer };
+  return { verdicts, evidence: uniqueEvidence.slice(0, 5), bestAnswer };
 }
 
-function searchKBForTerms(terms, optionText) {
+function searchKBForTerms(questionLower, optLower) {
+  // Extract key phrases from the question and option
+  const questionWords = questionLower.split(/\s+/).filter(w => w.length > 4 && !isStopWord(w));
+  const optionWords = optLower.split(/\s+/).filter(w => w.length > 4 && !isStopWord(w));
+
+  // Also extract quoted or special phrases
+  const keyPhrases = [];
+  // Look for multi-word terms (2-3 word combinations that might be meaningful)
+  const allQWords = questionLower.split(/\s+/).filter(w => w.length > 3);
+  for (let i = 0; i < allQWords.length - 1; i++) {
+    keyPhrases.push(allQWords[i] + ' ' + allQWords[i + 1]);
+  }
+
   const results = [];
-  const optLower = optionText.toLowerCase();
 
   KNOWLEDGE_BASE.forEach(mod => {
     mod.topics.forEach(topic => {
       let score = 0;
       const contentLower = topic.content.toLowerCase();
       const titleLower = topic.title.toLowerCase();
-      terms.forEach(term => {
-        if (titleLower.includes(term)) score += 3;
-        if (contentLower.includes(term)) score += 1;
-      });
-      if (optLower && contentLower.includes(optLower)) score += 5;
+
+      // Phrase matches (strongest signal) — question+option phrase found in content
+      for (const phrase of keyPhrases) {
+        if (contentLower.includes(phrase)) score += 8;
+      }
+
+      // Option text contains a KB term (the option IS about this topic)
+      const titleWords = titleLower.split(/\s+/).filter(w => w.length > 3);
+      for (const tw of titleWords) {
+        if (optLower.includes(tw)) score += 6;
+      }
+
+      // Significant words from option found in topic title
+      for (const ow of optionWords) {
+        if (titleLower.includes(ow)) score += 4;
+      }
+
+      // Significant words from question found in topic title
+      for (const qw of questionWords) {
+        if (titleLower.includes(qw)) score += 3;
+      }
+
+      // Option words found in content body
+      for (const ow of optionWords) {
+        if (contentLower.includes(ow)) score += 2;
+      }
+
+      // Question words found in content body (weakest signal)
+      for (const qw of questionWords) {
+        if (contentLower.includes(qw)) score += 1;
+      }
+
+      // Bonus: topic title is directly part of the option
+      if (optLower.includes(titleLower) && titleLower.length > 6) score += 10;
+
       if (score > 0) {
         results.push({
           module: mod.name,
@@ -1023,6 +1104,15 @@ function searchKBForTerms(terms, optionText) {
 
   results.sort((a, b) => b.score - a.score);
   return results;
+}
+
+function isStopWord(word) {
+  const stops = new Set([
+    'which', 'there', 'their', 'about', 'would', 'could', 'should', 'these',
+    'those', 'other', 'being', 'where', 'after', 'while', 'having', 'because',
+    'before', 'during', 'between', 'through', 'without', 'following'
+  ]);
+  return stops.has(word);
 }
 
 // ==============================
@@ -1173,17 +1263,21 @@ function processOCRExtractedText(text) {
 
   document.getElementById('ocr-answer').innerHTML = `
     <div class="paste-answer-header">
-      <h3>📋 Analysis</h3>
+      <h3>📋 Analysis (relative keyword matching)</h3>
     </div>
     ${results.verdicts.map(v => `
       <div class="paste-answer-option ${v.level}">
-        <strong>${v.letter}.</strong> ${escHtml(v.text)}
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">— ${v.explanation}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span><strong>${v.letter}.</strong> ${escHtml(v.text)}</span>
+          <span class="score-badge ${v.level}">score: ${v.score} (${v.ratio}% match)</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${v.explanation}</div>
       </div>
     `).join('')}
     <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
-      <strong>Most likely answer:</strong> ${results.bestAnswer}
+      <strong>Best match:</strong> ${results.bestAnswer}
     </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ This is keyword-based matching against the knowledge base, not AI. Always verify against the official Odoo docs.</p>
   `;
 
   document.getElementById('ocr-evidence').innerHTML = `
@@ -1195,7 +1289,7 @@ function processOCRExtractedText(text) {
           <div class="evidence-text">${e.snippet}</div>
         </div>
       `).join('')
-      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base.</p>'}
+      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question or checking the official Odoo docs directly.</p>'}
   `;
 }
 
