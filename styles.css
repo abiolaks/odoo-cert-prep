@@ -1139,47 +1139,334 @@ mark {
 }
 
 /* ==============================
+   Mobile Header & Hamburger
+   ============================== */
+
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  z-index: 200;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+}
+
+.mobile-brand {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hamburger-btn:active { background: var(--bg-hover); }
+
+.hamburger-btn span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+.hamburger-btn.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.hamburger-btn.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-btn.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ==============================
    Responsive
    ============================== */
 
 @media (max-width: 768px) {
-  .sidebar {
-    width: 100%;
-    position: relative;
-    flex-direction: row;
-    padding: 12px;
-    overflow-x: auto;
+  :root {
+    --sidebar-width: 260px;
   }
 
-  .sidebar-brand { display: none; }
-  .sidebar-nav { flex-direction: row; flex: 1; padding: 0; }
-  .sidebar-footer { display: none; }
+  .app {
+    flex-direction: column;
+  }
+
+  /* Mobile header */
+  .mobile-header { display: flex; }
+
+  /* Sidebar — slide in from left */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    z-index: 175;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    padding: 20px 0;
+    box-shadow: var(--shadow);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay { display: block; }
+
+  .sidebar-brand { display: flex; }
+  .sidebar-footer { display: block; }
+
+  .sidebar-nav {
+    flex-direction: column;
+    gap: 2px;
+    padding: 16px 12px;
+    overflow-y: auto;
+  }
 
   .nav-btn {
-    padding: 8px 12px;
-    font-size: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    min-height: 48px;
   }
 
-  .nav-btn .nav-icon { font-size: 16px; }
+  .nav-btn .nav-icon { font-size: 20px; width: 28px; }
 
+  /* Main content */
   .main-content {
     margin-left: 0;
-    padding: 20px;
+    margin-top: 56px;
+    padding: 20px 16px;
+    max-width: 100%;
   }
 
-  .app { flex-direction: column; }
+  .tab-header { margin-bottom: 20px; }
 
+  .tab-header h1 { font-size: 20px; }
+  .tab-header p { font-size: 13px; }
+
+  /* Exam mobile */
   .exam-topbar {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
   }
 
-  .kb-grid {
-    grid-template-columns: 1fr;
-  }
+  .timer { font-size: 20px; }
 
   .exam-nav {
     flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .exam-nav .question-dots {
+    order: -1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .question-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .question-card {
+    padding: 16px;
+  }
+
+  .question-text {
+    font-size: 15px;
+  }
+
+  .question-option {
+    padding: 12px 14px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .question-option::before {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    font-size: 11px;
+  }
+
+  /* Start card */
+  .start-card { padding: 20px; }
+  .start-card h2 { font-size: 18px; }
+  .detail-row { font-size: 13px; }
+
+  /* Results */
+  .results-card { padding: 20px; }
+
+  /* Buttons — touch targets */
+  .btn-primary, .btn-secondary, .btn-danger {
+    padding: 12px 20px;
+    font-size: 14px;
+    min-height: 44px;
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .question-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .exam-nav .btn-secondary {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Drill */
+  .drill-setup { padding: 0; }
+  .drill-topbar { flex-direction: column; gap: 8px; }
+  .drill-feedback { padding: 12px; }
+
+  /* Knowledge Base */
+  .kb-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .kb-card { padding: 14px; }
+
+  .kb-topic-header {
+    padding: 12px 10px;
+    min-height: 44px;
+  }
+
+  /* Search */
+  .qa-search-box {
+    flex-direction: column;
+  }
+
+  .search-input {
+    font-size: 16px; /* Prevent iOS zoom */
+    padding: 12px 14px;
+  }
+
+  /* Paste Question */
+  .paste-textarea {
+    font-size: 14px;
+    padding: 14px;
+    min-height: 180px;
+  }
+
+  .paste-container { gap: 12px; }
+
+  .paste-question-display { padding: 14px; }
+
+  .paste-option { font-size: 14px; }
+
+  .paste-answer-option {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .evidence-item {
+    padding: 12px 14px;
+  }
+
+  /* OCR */
+  .ocr-upload-zone {
+    padding: 40px 20px;
+  }
+
+  .ocr-upload-icon { font-size: 36px; }
+
+  .ocr-upload-zone p {
+    font-size: 14px;
+  }
+
+  .ocr-preview {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ocr-preview img {
+    max-height: 250px;
+  }
+
+  .ocr-text-display {
+    font-size: 14px;
+    max-height: 200px;
+  }
+
+  .ocr-results { gap: 12px; }
+
+  /* History */
+  .history-list { gap: 10px; }
+
+  .history-item {
+    padding: 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Review */
+  .review-item {
+    padding: 14px;
+  }
+
+  /* Spacing fixes */
+  .drill-config, .form-group {
+    width: 100%;
+  }
+
+  .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  /* Side-by-side buttons in paste/OCR header */
+  .paste-actions {
+    flex-direction: column;
   }
 }
