@@ -883,14 +883,131 @@ function processPastedQuestion() {
     ${parsed.options.map((opt, i) => `<div class="paste-option"><strong>${String.fromCharCode(65 + i)}.</strong> ${escHtml(opt)}</div>`).join('')}
   `;
 
-  // Search KB for each option
+  // STAGE 1: Try to match against our verified question bank
+  const match = findMatchingQuestion(parsed);
+
+  if (match) {
+    // Found a match in our bank — show verified answers
+    showVerifiedAnswer(parsed, match);
+  } else {
+    // No match found — fall back to KB search with clear caveats
+    showKBEstimate(parsed);
+  }
+}
+
+function findMatchingQuestion(parsed) {
+  const qLower = parsed.question.toLowerCase();
+  const qWords = new Set(qLower.split(/\s+/).filter(w => w.length > 3 && !isStopWord(w)));
+
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const q of QUESTIONS) {
+    const bankQLower = q.question.toLowerCase();
+    const bankWords = new Set(bankQLower.split(/\s+/).filter(w => w.length > 3 && !isStopWord(w)));
+
+    // Jaccard-like overlap on significant words
+    const intersection = [...qWords].filter(w => bankWords.has(w)).length;
+    const union = new Set([...qWords, ...bankWords]).size;
+    const questionSimilarity = intersection / union;
+
+    // Also check option overlap
+    let optionMatchCount = 0;
+    for (const pastedOpt of parsed.options) {
+      const pLower = pastedOpt.toLowerCase();
+      for (const bankOpt of q.options) {
+        const bLower = bankOpt.toLowerCase();
+        const pWords = new Set(pLower.split(/\s+/).filter(w => w.length > 3));
+        const bWords = new Set(bLower.split(/\s+/).filter(w => w.length > 3));
+        const optIntersection = [...pWords].filter(w => bWords.has(w)).length;
+        const optUnion = new Set([...pWords, ...bWords]).size;
+        if (optUnion > 0 && optIntersection / optUnion > 0.5) {
+          optionMatchCount++;
+          break;
+        }
+      }
+    }
+    const optionSimilarity = parsed.options.length > 0 ? optionMatchCount / parsed.options.length : 0;
+
+    // Combined score: question text matters more than option overlap
+    const score = questionSimilarity * 0.6 + optionSimilarity * 0.4;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = { question: q, score };
+    }
+  }
+
+  // Require a minimum similarity to consider it a match
+  if (bestScore >= 0.35) return bestMatch;
+  return null;
+}
+
+function showVerifiedAnswer(parsed, match) {
+  const q = match.question;
+
+  // Map the correct indices to letters
+  const correctLetters = q.correct.map(idx => String.fromCharCode(65 + idx));
+
+  document.getElementById('paste-answer').innerHTML = `
+    <div class="match-banner" style="background:rgba(158,206,106,0.1);border:1px solid rgba(158,206,106,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+      <span style="color:var(--success);font-weight:600;">✅ Matched question bank</span>
+      <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">(${Math.round(match.score * 100)}% similarity — verified answer)</span>
+    </div>
+    <div class="paste-answer-header"><h3>📋 Answer</h3></div>
+    ${parsed.options.map((opt, i) => {
+      const letter = String.fromCharCode(65 + i);
+      const isCorrect = correctLetters.includes(letter);
+      return `
+        <div class="paste-answer-option ${isCorrect ? 'likely' : 'no-evidence'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span><strong>${letter}.</strong> ${escHtml(opt)}</span>
+            <span style="font-size:12px;font-weight:600;color:${isCorrect ? 'var(--success)' : 'var(--error)'};">${isCorrect ? '✓ CORRECT' : '✗ INCORRECT'}</span>
+          </div>
+        </div>`;
+    }).join('')}
+
+    ${q.explanation ? `
+    <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+      <strong>Explanation:</strong><br>
+      <span style="color:var(--text-secondary);font-size:13px;">${escHtml(q.explanation)}</span>
+    </div>` : ''}
+
+    <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+      <strong>Correct answer from question bank:</strong><br>
+      <span style="color:var(--success);">${q.correct.map(idx => `${String.fromCharCode(65 + idx)}. ${escHtml(q.options[idx])}`).join('<br>')}</span>
+    </div>
+
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">✅ This answer comes from our verified question bank (${q.id}), not from keyword guessing.</p>
+  `;
+
+  // Show KB references for this question
+  const refs = QUESTION_KB_REFS[q.id];
+  document.getElementById('paste-evidence').innerHTML = `
+    <h3>🔍 Source References</h3>
+    ${refs && refs.length > 0
+      ? refs.map(r => {
+        const content = getKBContent(r);
+        return content ? `
+          <div class="evidence-item" style="cursor:pointer;" onclick="navigateToKB('${escAttr(r.moduleId)}','${escAttr(r.topicTitle)}')">
+            <div class="evidence-source">${content.module.name} → ${content.topic.title}</div>
+            <div class="evidence-text">${content.topic.content.substring(0, 250)}...</div>
+          </div>` : '';
+      }).join('')
+      : '<p style="color:var(--text-muted);font-size:13px;">No specific KB references for this question.</p>'}
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Click a reference to jump to that topic in the Knowledge Base.</p>
+  `;
+}
+
+function showKBEstimate(parsed) {
   const results = evaluateOptions(parsed);
 
-  // Display answer verdict
   document.getElementById('paste-answer').innerHTML = `
-    <div class="paste-answer-header">
-      <h3>📋 Analysis (relative keyword matching)</h3>
+    <div class="match-banner" style="background:rgba(224,175,104,0.1);border:1px solid rgba(224,175,104,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+      <span style="color:var(--warning);font-weight:600;">⚠️ No match in question bank</span>
+      <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">Showing keyword-based estimate — not a verified answer</span>
     </div>
+    <div class="paste-answer-header"><h3>📋 Keyword-Based Estimate</h3></div>
     ${results.verdicts.map(v => `
       <div class="paste-answer-option ${v.level}">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -901,22 +1018,21 @@ function processPastedQuestion() {
       </div>
     `).join('')}
     <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
-      <strong>Best match:</strong> ${results.bestAnswer}
+      <strong>Best keyword match:</strong> ${results.bestAnswer}
     </div>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ This is keyword-based matching against the knowledge base, not AI. Always verify against the official Odoo docs.</p>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ No matching question was found in our verified bank. This is a keyword-based guess and may be inaccurate. Always verify against the official Odoo documentation.</p>
   `;
 
-  // Display evidence
   document.getElementById('paste-evidence').innerHTML = `
-    <h3>🔍 Evidence from Odoo Documentation</h3>
+    <h3>🔍 Related Documentation</h3>
     ${results.evidence.length > 0
       ? results.evidence.slice(0, 5).map(e => `
         <div class="evidence-item">
           <div class="evidence-source">${e.module} → ${e.topic}</div>
-          <div class="evidence-text">${highlightText(e.snippet, parsed.question.split(' ').slice(0, 3).join(' '))}</div>
+          <div class="evidence-text">${e.snippet}</div>
         </div>
       `).join('')
-      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question or checking the official Odoo docs directly.</p>'}
+      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found. Try rephrasing the question or check the official Odoo docs directly.</p>'}
   `;
 }
 
@@ -1259,38 +1375,85 @@ function processOCRExtractedText(text) {
     return;
   }
 
-  const results = evaluateOptions(parsed);
+  const match = findMatchingQuestion(parsed);
 
-  document.getElementById('ocr-answer').innerHTML = `
-    <div class="paste-answer-header">
-      <h3>📋 Analysis (relative keyword matching)</h3>
-    </div>
-    ${results.verdicts.map(v => `
-      <div class="paste-answer-option ${v.level}">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <span><strong>${v.letter}.</strong> ${escHtml(v.text)}</span>
-          <span class="score-badge ${v.level}">score: ${v.score} (${v.ratio}% match)</span>
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${v.explanation}</div>
+  if (match) {
+    const q = match.question;
+    const correctLetters = q.correct.map(idx => String.fromCharCode(65 + idx));
+
+    document.getElementById('ocr-answer').innerHTML = `
+      <div class="match-banner" style="background:rgba(158,206,106,0.1);border:1px solid rgba(158,206,106,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+        <span style="color:var(--success);font-weight:600;">✅ Matched question bank</span>
+        <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">(${Math.round(match.score * 100)}% similarity — verified answer)</span>
       </div>
-    `).join('')}
-    <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
-      <strong>Best match:</strong> ${results.bestAnswer}
-    </div>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ This is keyword-based matching against the knowledge base, not AI. Always verify against the official Odoo docs.</p>
-  `;
+      <div class="paste-answer-header"><h3>📋 Answer</h3></div>
+      ${parsed.options.map((opt, i) => {
+        const letter = String.fromCharCode(65 + i);
+        const isCorrect = correctLetters.includes(letter);
+        return `
+          <div class="paste-answer-option ${isCorrect ? 'likely' : 'no-evidence'}">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span><strong>${letter}.</strong> ${escHtml(opt)}</span>
+              <span style="font-size:12px;font-weight:600;color:${isCorrect ? 'var(--success)' : 'var(--error)'};">${isCorrect ? '✓ CORRECT' : '✗ INCORRECT'}</span>
+            </div>
+          </div>`;
+      }).join('')}
+      ${q.explanation ? `
+      <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+        <strong>Explanation:</strong><br>
+        <span style="color:var(--text-secondary);font-size:13px;">${escHtml(q.explanation)}</span>
+      </div>` : ''}
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">✅ This answer comes from our verified question bank (${q.id}), not from keyword guessing.</p>
+    `;
 
-  document.getElementById('ocr-evidence').innerHTML = `
-    <h3>🔍 Evidence from Odoo Documentation</h3>
-    ${results.evidence.length > 0
-      ? results.evidence.slice(0, 5).map(e => `
-        <div class="evidence-item">
-          <div class="evidence-source">${e.module} → ${e.topic}</div>
-          <div class="evidence-text">${e.snippet}</div>
+    const refs = QUESTION_KB_REFS[q.id];
+    document.getElementById('ocr-evidence').innerHTML = `
+      <h3>🔍 Source References</h3>
+      ${refs && refs.length > 0
+        ? refs.map(r => {
+          const content = getKBContent(r);
+          return content ? `
+            <div class="evidence-item" style="cursor:pointer;" onclick="navigateToKB('${escAttr(r.moduleId)}','${escAttr(r.topicTitle)}')">
+              <div class="evidence-source">${content.module.name} → ${content.topic.title}</div>
+              <div class="evidence-text">${content.topic.content.substring(0, 250)}...</div>
+            </div>` : '';
+        }).join('')
+        : '<p style="color:var(--text-muted);font-size:13px;">No specific KB references for this question.</p>'}
+    `;
+  } else {
+    const results = evaluateOptions(parsed);
+    document.getElementById('ocr-answer').innerHTML = `
+      <div class="match-banner" style="background:rgba(224,175,104,0.1);border:1px solid rgba(224,175,104,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+        <span style="color:var(--warning);font-weight:600;">⚠️ No match in question bank</span>
+        <span style="color:var(--text-muted);font-size:12px;margin-left:8px;">Showing keyword-based estimate — not a verified answer</span>
+      </div>
+      <div class="paste-answer-header"><h3>📋 Keyword-Based Estimate</h3></div>
+      ${results.verdicts.map(v => `
+        <div class="paste-answer-option ${v.level}">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span><strong>${v.letter}.</strong> ${escHtml(v.text)}</span>
+            <span class="score-badge ${v.level}">score: ${v.score} (${v.ratio}% match)</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${v.explanation}</div>
         </div>
-      `).join('')
-      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question or checking the official Odoo docs directly.</p>'}
-  `;
+      `).join('')}
+      <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+        <strong>Best keyword match:</strong> ${results.bestAnswer}
+      </div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">⚠️ No matching question found in verified bank. This is a keyword-based guess. Verify against official docs.</p>
+    `;
+    document.getElementById('ocr-evidence').innerHTML = `
+      <h3>🔍 Related Documentation</h3>
+      ${results.evidence.length > 0
+        ? results.evidence.slice(0, 5).map(e => `
+          <div class="evidence-item">
+            <div class="evidence-source">${e.module} → ${e.topic}</div>
+            <div class="evidence-text">${e.snippet}</div>
+          </div>
+        `).join('')
+        : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found.</p>'}
+    `;
+  }
 }
 
 function editOCRText() {
