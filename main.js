@@ -19,6 +19,10 @@ const state = {
   drillCurrentIndex: 0,
   drillChecked: false,
   drillCorrectCount: 0,
+  // Lazy loading flags
+  kbRendered: false,
+  ocrLoaded: false,
+  tesseractLoading: false,
 };
 
 // ---- Module list ----
@@ -85,7 +89,9 @@ function setupTabNavigation() {
       state.activeTab = tab;
       document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
       document.getElementById(`tab-${tab}`).classList.add('active');
-      if (tab === 'knowledge') renderKnowledgeBase();
+      // Lazy-load heavy content only when tab is first opened
+      if (tab === 'knowledge' && !state.kbRendered) { renderKnowledgeBase(); state.kbRendered = true; }
+      if (tab === 'ocr' && !state.ocrLoaded) loadTesseract();
       if (tab === 'history') renderHistory();
     });
   });
@@ -501,8 +507,9 @@ function navigateToKB(moduleId, topicTitle) {
   if (kbTab) kbTab.classList.add('active');
   state.activeTab = 'knowledge';
 
-  // Render KB and open the specific topic
+  // Render KB and open the specific topic (may be first time)
   renderKnowledgeBase();
+  state.kbRendered = true;
 
   // Find and open the specific module + topic
   setTimeout(() => {
@@ -767,7 +774,27 @@ function setupKnowledgeBase() {
   document.getElementById('kb-search').addEventListener('input', (e) => {
     renderKnowledgeBase(e.target.value);
   });
-  renderKnowledgeBase();
+  // KB rendering is lazy — only when the tab is first opened
+}
+
+// ---- Lazy load Tesseract.js (only when OCR tab is opened) ----
+function loadTesseract() {
+  if (state.tesseractLoading) return;
+  state.tesseractLoading = true;
+  state.ocrLoaded = true; // Mark loaded to prevent re-load attempts
+
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js';
+  script.onload = () => {
+    console.log('Tesseract.js loaded');
+    state.ocrLoaded = true;
+  };
+  script.onerror = () => {
+    console.warn('Failed to load Tesseract.js');
+    state.ocrLoaded = false;
+    state.tesseractLoading = false;
+  };
+  document.head.appendChild(script);
 }
 
 // ==============================
@@ -1377,7 +1404,20 @@ async function processOCRImage() {
   document.getElementById('ocr-results').classList.add('hidden');
 
   try {
-    // Use Tesseract.js for OCR (loaded from CDN)
+    // Ensure Tesseract is loaded (may be loading lazily)
+    if (typeof Tesseract === 'undefined') {
+      document.getElementById('ocr-progress').textContent = 'Loading OCR engine...';
+      if (!state.tesseractLoading) loadTesseract();
+      // Wait up to 30s for Tesseract to load
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        if (typeof Tesseract !== 'undefined') break;
+      }
+      if (typeof Tesseract === 'undefined') {
+        throw new Error('OCR engine failed to load. Check your internet connection and try again.');
+      }
+    }
+
     const { createWorker } = Tesseract;
     const worker = await createWorker('eng', 1, {
       logger: m => {
