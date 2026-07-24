@@ -1032,13 +1032,34 @@ function searchKBForTerms(terms, optionText) {
 function setupOCR() {
   const dropZone = document.getElementById('ocr-drop-zone');
   const fileInput = document.getElementById('ocr-file-input');
+  const cameraInput = document.getElementById('ocr-camera-input');
   const preview = document.getElementById('ocr-preview');
   const previewImg = document.getElementById('ocr-preview-img');
 
-  // Click to select
-  dropZone.addEventListener('click', () => fileInput.click());
+  // Camera button
+  document.getElementById('btn-ocr-camera').addEventListener('click', (e) => {
+    e.stopPropagation();
+    cameraInput.click();
+  });
+  cameraInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleOCRFile(e.target.files[0]);
+  });
+
+  // Gallery button
+  document.getElementById('btn-ocr-gallery').addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
   fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) handleOCRFile(e.target.files[0]);
+  });
+
+  // Click on drop zone background still works (clicking the zone, not buttons)
+  dropZone.addEventListener('click', (e) => {
+    // Only trigger if clicking the zone itself, not a button inside it
+    if (e.target === dropZone || e.target.closest('.ocr-upload-icon') || e.target.tagName === 'P') {
+      fileInput.click();
+    }
   });
 
   // Drag and drop
