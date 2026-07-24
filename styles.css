@@ -572,6 +572,7 @@ body {
 }
 
 .review-status.correct { color: var(--success); }
+.review-status.partial { color: var(--warning); }
 .review-status.incorrect { color: var(--error); }
 .review-status.skipped { color: var(--text-muted); }
 
@@ -636,6 +637,10 @@ body {
 
 .drill-feedback.correct {
   border-left: 3px solid var(--success);
+}
+
+.drill-feedback.partial {
+  border-left: 3px solid var(--warning);
 }
 
 .drill-feedback.incorrect {
@@ -750,6 +755,23 @@ body {
 }
 
 .kb-topic-title:hover { color: var(--accent); }
+
+/* KB topic highlight animation (when navigated from a reference link) */
+.kb-topic.highlight-target {
+  animation: kb-highlight-pulse 2s ease-out;
+  border-radius: 6px;
+  padding: 6px;
+  margin: -6px;
+  background: rgba(122, 162, 247, 0.08);
+}
+@keyframes kb-highlight-pulse {
+  0% { background: rgba(122, 162, 247, 0.25); }
+  100% { background: rgba(122, 162, 247, 0); }
+}
+
+.kb-topic.highlight-target .kb-topic-title {
+  color: var(--accent);
+}
 
 /* ==============================
    Q&A Search
