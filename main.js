@@ -454,7 +454,14 @@ function showReview() {
       if (setsEqual(correctSet, selectedSet)) {
         statusCls = 'correct'; statusText = '✓ Correct';
       } else {
-        statusCls = 'incorrect'; statusText = '✗ Incorrect (−0.5)';
+        // Check if at least one selected option is correct (partial credit case)
+        const hasCorrectPick = selected.some(oi => q.correct.includes(oi));
+        const missedRequired = q.correct.some(ci => !selected.includes(ci));
+        if (hasCorrectPick && missedRequired) {
+          statusCls = 'partial'; statusText = '⚠ Partially Correct (−0.5)';
+        } else {
+          statusCls = 'incorrect'; statusText = '✗ Incorrect (−0.5)';
+        }
       }
     }
 
@@ -507,29 +514,72 @@ function navigateToKB(moduleId, topicTitle) {
   if (kbTab) kbTab.classList.add('active');
   state.activeTab = 'knowledge';
 
-  // Render KB and open the specific topic (may be first time)
+  // Also close mobile sidebar if open
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('open');
+  if (overlay) overlay.classList.remove('active');
+
+  // Render KB (may be first time)
   renderKnowledgeBase();
   state.kbRendered = true;
 
-  // Find and open the specific module + topic
-  setTimeout(() => {
+  // Find the specific module + topic — retry up to 2s in case rendering is slow
+  const moduleName = MODULE_NAMES[moduleId] || moduleId;
+  const maxAttempts = 20;
+  let attempts = 0;
+
+  function findAndScroll() {
+    attempts++;
     const cards = document.querySelectorAll('.kb-module-card');
+    let found = false;
+
     cards.forEach(card => {
       const header = card.querySelector('.kb-module-header h3');
-      if (header && header.textContent === (MODULE_NAMES[moduleId] || moduleId)) {
-        // Scroll to this card
-        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        // Find and open the specific topic
-        const topics = card.querySelectorAll('.kb-topic');
-        topics.forEach(t => {
-          const title = t.querySelector('.kb-topic-title');
-          if (title && title.textContent === topicTitle) {
-            t.classList.add('open');
-          }
-        });
+      if (!header) return;
+      // Case-insensitive module name match
+      if (header.textContent.trim().toLowerCase() !== moduleName.toLowerCase()) return;
+
+      // Open ALL topics in this module so the user can see context
+      const topics = card.querySelectorAll('.kb-topic');
+      let targetTopic = null;
+
+      topics.forEach(t => {
+        const title = t.querySelector('.kb-topic-title');
+        if (!title) return;
+        // Case-insensitive topic title match
+        const titleText = title.textContent.trim().toLowerCase();
+        const searchText = topicTitle.toLowerCase();
+        if (titleText === searchText || titleText.includes(searchText) || searchText.includes(titleText)) {
+          targetTopic = t;
+        }
+        // Open all topics so nothing is hidden
+        t.classList.add('open');
+      });
+
+      // Scroll the module card into view
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      found = true;
+
+      // Highlight the specific topic with a brief pulse animation
+      if (targetTopic) {
+        // Remove any previous highlights
+        document.querySelectorAll('.kb-topic.highlight-target').forEach(el => el.classList.remove('highlight-target'));
+        targetTopic.classList.add('highlight-target');
+        // Scroll the topic into clearer view
+        setTimeout(() => targetTopic.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+        // Remove highlight after animation completes
+        setTimeout(() => targetTopic.classList.remove('highlight-target'), 2500);
       }
     });
-  }, 100);
+
+    if (!found && attempts < maxAttempts) {
+      setTimeout(findAndScroll, 100);
+    }
+  }
+
+  // Start searching after a short frame delay to let the DOM render
+  setTimeout(findAndScroll, 50);
 }
 
 function escAttr(str) {
@@ -666,13 +716,41 @@ function checkDrillAnswer() {
   if (state.drillShowAnswers) {
     const fb = document.getElementById('drill-feedback');
     fb.classList.remove('hidden');
-    fb.className = `drill-feedback ${isCorrect ? 'correct' : 'incorrect'}`;
-    fb.innerHTML = `
-      <p style="font-weight:600;">${isCorrect ? '✅ Correct!' : '❌ Incorrect'}</p>
-      ${q.explanation ? `<p class="explanation">💡 ${q.explanation}</p>` : ''}
-      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Correct: ${q.correct.map(i => String.fromCharCode(65 + i)).join(', ')}</p>
-      ${renderKBRefs(q)}
-    `;
+
+    // Determine feedback level: correct, partial, or incorrect
+    const hasCorrectPick = selected.some(oi => q.correct.includes(oi));
+    const hasWrongPick = selected.some(oi => !q.correct.includes(oi));
+    const missedRequired = q.correct.some(ci => !selected.includes(ci));
+
+    let fbLevel, fbTitle, fbDetail;
+    if (isCorrect) {
+      fbLevel = 'correct';
+      fbTitle = '✅ Correct!';
+      fbDetail = '';
+    } else if (hasCorrectPick && missedRequired) {
+      fbLevel = 'partial';
+      fbTitle = '⚠️ Partially Correct';
+      fbDetail = '<p style="font-size:12px;margin-top:4px;color:var(--warning)">You selected some correct answers, but missed: ' +
+        q.correct.filter(ci => !selected.includes(ci)).map(i => String.fromCharCode(65 + i) + '. ' + q.options[i]).join(', ') + '</p>';
+    } else {
+      fbLevel = 'incorrect';
+      fbTitle = '❌ Incorrect';
+      // Show what the user picked vs what was correct
+      const userPickStr = selected.map(oi => String.fromCharCode(65 + oi) + '. ' + q.options[oi]).join(', ') || '(none)';
+      const correctStr = q.correct.map(i => String.fromCharCode(65 + i) + '. ' + q.options[i]).join(', ');
+      fbDetail = '<div style="margin-top:6px;font-size:12px;">' +
+        '<div style="color:var(--error);margin-bottom:2px;">You selected: ' + userPickStr + '</div>' +
+        '<div style="color:var(--success);">Correct answer: ' + correctStr + '</div>' +
+        '</div>';
+    }
+
+    fb.className = 'drill-feedback ' + fbLevel;
+    fb.innerHTML =
+      '<p style="font-weight:600;">' + fbTitle + '</p>' +
+      fbDetail +
+      (q.explanation ? '<p class="explanation">💡 ' + q.explanation + '</p>' : '') +
+      '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Correct: ' + q.correct.map(i => String.fromCharCode(65 + i)).join(', ') + '</p>' +
+      renderKBRefs(q);
   }
 
   document.getElementById('btn-check-answer').classList.add('hidden');
