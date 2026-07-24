@@ -108,6 +108,36 @@ function setupExam() {
     document.getElementById('exam-review').classList.add('hidden');
     document.getElementById('exam-results').classList.remove('hidden');
   });
+  document.getElementById('btn-exam-hint').addEventListener('click', showExamHint);
+}
+
+function showExamHint() {
+  const q = state.examQuestions[state.examCurrentIndex];
+  if (!q) return;
+
+  const correctLetters = q.correct.map(idx => String.fromCharCode(65 + idx));
+  const hintDiv = document.getElementById('exam-hint-result');
+  hintDiv.classList.remove('hidden');
+
+  // Since exam questions come from our bank, we always know the answer
+  hintDiv.innerHTML = `
+    <div style="font-weight:600;margin-bottom:8px;">
+      <span class="hint-correct">✅ Correct: ${correctLetters.join(', ')}</span>
+    </div>
+    <div style="color:var(--text-secondary);font-size:12px;">
+      ${q.explanation ? escHtml(q.explanation) : ''}
+    </div>
+    ${q.id ? `<div style="margin-top:4px;font-size:11px;color:var(--text-muted);">Source: question bank (${q.id})</div>` : ''}
+    <div style="margin-top:6px;font-size:10px;color:var(--warning);">⚠️ Using hints will affect your practice assessment. Try first, then hint if stuck.</div>
+  `;
+
+  // Clear hint when navigating
+  const clearHint = () => hintDiv.classList.add('hidden');
+  // Replace navigation listeners with hint-clearing versions
+  const prevBtn = document.getElementById('btn-prev');
+  const nextBtn = document.getElementById('btn-next');
+  prevBtn.addEventListener('click', clearHint, { once: true });
+  nextBtn.addEventListener('click', clearHint, { once: true });
 }
 
 function startExam() {
@@ -157,6 +187,9 @@ function renderExamQuestion() {
   const idx = state.examCurrentIndex;
   const q = state.examQuestions[idx];
   if (!q) return;
+
+  // Clear any previous hint
+  document.getElementById('exam-hint-result').classList.add('hidden');
 
   document.getElementById('exam-q-module').textContent = MODULE_NAMES[q.module] || q.module;
   document.getElementById('exam-q-topic').textContent = q.topic || '';
