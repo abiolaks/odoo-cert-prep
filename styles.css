@@ -954,6 +954,10 @@ mark {
   margin-bottom: 16px;
 }
 
+.match-banner {
+  font-size: 13px;
+}
+
 .paste-answer-header {
   display: flex;
   align-items: center;
