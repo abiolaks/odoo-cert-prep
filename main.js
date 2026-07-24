@@ -388,15 +388,29 @@ function calculateResults() {
 function displayResults(results) {
   const passed = results.percentage >= 70;
   document.getElementById('results-heading').textContent = passed ? '🎉 Congratulations!' : 'Keep Studying';
-  document.getElementById('results-score').textContent = `${results.totalScore}/${results.maxScore}`;
+  document.getElementById('results-score').textContent = `${results.totalScore.toFixed(1)}/${results.maxScore}`;
   document.getElementById('results-percent').textContent = `${results.percentage}%`;
   const passfail = document.getElementById('results-passfail');
-  passfail.textContent = passed ? '✅ PASSED' : '❌ NOT YET — NEED 70%';
+  passfail.textContent = passed ? '✅ PASSED (70%+ required)' : '❌ NOT YET — Need 70% to pass';
   passfail.className = `results-pass-fail ${passed ? 'pass' : 'fail'}`;
 
-  // Module breakdown
+  // Summary counts
   const breakdown = document.getElementById('results-breakdown');
   breakdown.innerHTML = `
+    <div class="results-summary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+      <div style="flex:1;min-width:100px;background:var(--bg-secondary);padding:12px;border-radius:8px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--success);">${results.correct}</div>
+        <div style="font-size:12px;color:var(--text-muted);">✓ Correct (+1)</div>
+      </div>
+      <div style="flex:1;min-width:100px;background:var(--bg-secondary);padding:12px;border-radius:8px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--error);">${results.incorrect}</div>
+        <div style="font-size:12px;color:var(--text-muted);">✗ Wrong (−0.5)</div>
+      </div>
+      <div style="flex:1;min-width:100px;background:var(--bg-secondary);padding:12px;border-radius:8px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--text-muted);">${results.skipped}</div>
+        <div style="font-size:12px;color:var(--text-muted);">— Skipped (0)</div>
+      </div>
+    </div>
     <h3 style="margin-bottom:12px;font-size:14px;">Module Breakdown</h3>
     <table class="breakdown-table">
       <thead><tr><th>Module</th><th>Correct</th><th>Incorrect</th><th>Skipped</th><th>Score</th></tr></thead>
