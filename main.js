@@ -45,6 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDrill();
   setupKnowledgeBase();
   setupQASearch();
+  setupPasteQuestion();
+  setupOCR();
   setupHistory();
 });
 
@@ -403,8 +405,59 @@ function showReview() {
         <p style="font-weight:600;margin-bottom:12px;">${q.question}</p>
         <div class="question-options">${optionsHtml}</div>
         ${q.explanation ? `<div class="review-explanation">💡 ${q.explanation}</div>` : ''}
+        ${renderKBRefs(q)}
       </div>`;
   }).join('');
+}
+
+// Render KB reference links for a question
+function renderKBRefs(q) {
+  const refs = QUESTION_KB_REFS[q.id];
+  if (!refs || refs.length === 0) return '';
+  return `
+    <div class="kb-refs">
+      <div class="kb-refs-title">📚 Documentation References</div>
+      ${refs.map(r => `<span class="kb-ref-link" onclick="navigateToKB('${r.moduleId}','${escAttr(r.topicTitle)}')">${MODULE_NAMES[r.moduleId] || r.moduleId} → ${r.topicTitle}</span>`).join('')}
+    </div>`;
+}
+
+// Navigate to the knowledge base tab and open a specific topic
+function navigateToKB(moduleId, topicTitle) {
+  // Switch to knowledge base tab
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const kbBtn = document.querySelector('[data-tab="knowledge"]');
+  if (kbBtn) kbBtn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const kbTab = document.getElementById('tab-knowledge');
+  if (kbTab) kbTab.classList.add('active');
+  state.activeTab = 'knowledge';
+
+  // Render KB and open the specific topic
+  renderKnowledgeBase();
+
+  // Find and open the specific module + topic
+  setTimeout(() => {
+    const cards = document.querySelectorAll('.kb-module-card');
+    cards.forEach(card => {
+      const header = card.querySelector('.kb-module-header h3');
+      if (header && header.textContent === (MODULE_NAMES[moduleId] || moduleId)) {
+        // Scroll to this card
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Find and open the specific topic
+        const topics = card.querySelectorAll('.kb-topic');
+        topics.forEach(t => {
+          const title = t.querySelector('.kb-topic-title');
+          if (title && title.textContent === topicTitle) {
+            t.classList.add('open');
+          }
+        });
+      }
+    });
+  }, 100);
+}
+
+function escAttr(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function resetExam() {
@@ -542,6 +595,7 @@ function checkDrillAnswer() {
       <p style="font-weight:600;">${isCorrect ? '✅ Correct!' : '❌ Incorrect'}</p>
       ${q.explanation ? `<p class="explanation">💡 ${q.explanation}</p>` : ''}
       <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Correct: ${q.correct.map(i => String.fromCharCode(65 + i)).join(', ')}</p>
+      ${renderKBRefs(q)}
     `;
   }
 
@@ -775,4 +829,350 @@ function setupHistory() {
     }
   });
   renderHistory();
+}
+
+// ==============================
+// Paste Question → Answer
+// ==============================
+
+function setupPasteQuestion() {
+  document.getElementById('btn-paste-answer').addEventListener('click', processPastedQuestion);
+  document.getElementById('btn-paste-clear').addEventListener('click', () => {
+    document.getElementById('paste-input').value = '';
+    document.getElementById('paste-results').classList.add('hidden');
+  });
+}
+
+function processPastedQuestion() {
+  const rawText = document.getElementById('paste-input').value.trim();
+  if (!rawText) return;
+
+  const parsed = parseQuestionText(rawText);
+  if (!parsed) {
+    alert('Could not parse the question. Please make sure it includes a question and options (A), B), etc.)');
+    return;
+  }
+
+  document.getElementById('paste-results').classList.remove('hidden');
+
+  // Display parsed question
+  document.getElementById('paste-question-display').innerHTML = `
+    <p class="question-text">${escHtml(parsed.question)}</p>
+    ${parsed.options.map((opt, i) => `<div class="paste-option"><strong>${String.fromCharCode(65 + i)}.</strong> ${escHtml(opt)}</div>`).join('')}
+  `;
+
+  // Search KB for each option
+  const results = evaluateOptions(parsed);
+
+  // Display answer verdict
+  document.getElementById('paste-answer').innerHTML = `
+    <div class="paste-answer-header">
+      <h3>📋 Analysis</h3>
+    </div>
+    ${results.verdicts.map(v => `
+      <div class="paste-answer-option ${v.level}">
+        <strong>${v.letter}.</strong> ${escHtml(v.text)}
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">— ${v.explanation}</span>
+      </div>
+    `).join('')}
+    <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+      <strong>Most likely answer:</strong> ${results.bestAnswer}
+    </div>
+  `;
+
+  // Display evidence
+  document.getElementById('paste-evidence').innerHTML = `
+    <h3>🔍 Evidence from Odoo Documentation</h3>
+    ${results.evidence.length > 0
+      ? results.evidence.slice(0, 5).map(e => `
+        <div class="evidence-item">
+          <div class="evidence-source">${e.module} → ${e.topic}</div>
+          <div class="evidence-text">${highlightText(e.snippet, parsed.question.split(' ').slice(0, 3).join(' '))}</div>
+        </div>
+      `).join('')
+      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base. Try rephrasing the question.</p>'}
+  `;
+}
+
+function parseQuestionText(text) {
+  // Split into question and options
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return null;
+
+  // First non-empty line is the question
+  let questionEnd = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (/^[A-Z][)\].]/.test(line) || /^[A-Z]\s/.test(line)) {
+      questionEnd = i;
+      break;
+    }
+  }
+  if (questionEnd === 0) questionEnd = lines.length;
+
+  const question = lines.slice(0, questionEnd).join(' ').trim();
+  const optionLines = lines.slice(questionEnd);
+
+  const options = [];
+  let current = '';
+  for (const line of optionLines) {
+    const trimmed = line.trim();
+    if (/^[A-Z][)\].]/.test(trimmed)) {
+      if (current) options.push(current);
+      current = trimmed.replace(/^[A-Z][)\].]\s*/, '').trim();
+    } else if (current) {
+      current += ' ' + trimmed;
+    }
+  }
+  if (current) options.push(current);
+
+  if (!question || options.length < 2) return null;
+
+  return { question, options };
+}
+
+function evaluateOptions(parsed) {
+  const questionWords = parsed.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const verdicts = [];
+  let allEvidence = [];
+
+  parsed.options.forEach((optionText, idx) => {
+    const letter = String.fromCharCode(65 + idx);
+    const optWords = optionText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const searchTerms = [...new Set([...questionWords, ...optWords])];
+    const evidence = searchKBForTerms(searchTerms, optionText);
+
+    if (evidence.length > 0) {
+      allEvidence = allEvidence.concat(evidence);
+      const score = evidence.reduce((s, e) => s + e.score, 0);
+      if (score >= 5) {
+        verdicts.push({ letter, text: optionText, level: 'likely', explanation: 'Strong support in documentation', score });
+      } else if (score >= 2) {
+        verdicts.push({ letter, text: optionText, level: 'likely', explanation: 'Partial support in documentation', score });
+      } else {
+        verdicts.push({ letter, text: optionText, level: 'unlikely', explanation: 'Weak or no direct support', score });
+      }
+    } else {
+      verdicts.push({ letter, text: optionText, level: 'no-evidence', explanation: 'No supporting evidence found', score: 0 });
+    }
+  });
+
+  // Deduplicate evidence
+  const seen = new Set();
+  const uniqueEvidence = allEvidence.filter(e => {
+    const key = e.module + e.topic;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const likely = verdicts.filter(v => v.level === 'likely');
+  const bestAnswer = likely.length > 0
+    ? likely.map(v => v.letter).join(', ')
+    : 'Could not determine confidently. Study the evidence below.';
+
+  return { verdicts, evidence: uniqueEvidence, bestAnswer };
+}
+
+function searchKBForTerms(terms, optionText) {
+  const results = [];
+  const optLower = optionText.toLowerCase();
+
+  KNOWLEDGE_BASE.forEach(mod => {
+    mod.topics.forEach(topic => {
+      let score = 0;
+      const contentLower = topic.content.toLowerCase();
+      const titleLower = topic.title.toLowerCase();
+      terms.forEach(term => {
+        if (titleLower.includes(term)) score += 3;
+        if (contentLower.includes(term)) score += 1;
+      });
+      if (optLower && contentLower.includes(optLower)) score += 5;
+      if (score > 0) {
+        results.push({
+          module: mod.name,
+          topic: topic.title,
+          snippet: topic.content.substring(0, 300) + (topic.content.length > 300 ? '...' : ''),
+          score
+        });
+      }
+    });
+  });
+
+  results.sort((a, b) => b.score - a.score);
+  return results;
+}
+
+// ==============================
+// Screenshot OCR → Answer
+// ==============================
+
+function setupOCR() {
+  const dropZone = document.getElementById('ocr-drop-zone');
+  const fileInput = document.getElementById('ocr-file-input');
+  const preview = document.getElementById('ocr-preview');
+  const previewImg = document.getElementById('ocr-preview-img');
+
+  // Click to select
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleOCRFile(e.target.files[0]);
+  });
+
+  // Drag and drop
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleOCRFile(file);
+  });
+
+  // Paste from clipboard
+  document.addEventListener('paste', (e) => {
+    if (state.activeTab !== 'ocr') return;
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          handleOCRFile(file);
+          break;
+        }
+      }
+    }
+  });
+
+  document.getElementById('btn-ocr-reset').addEventListener('click', resetOCR);
+  document.getElementById('btn-ocr-process').addEventListener('click', processOCRImage);
+  document.getElementById('btn-ocr-edit').addEventListener('click', editOCRText);
+}
+
+function handleOCRFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('ocr-preview-img').src = e.target.result;
+    document.getElementById('ocr-upload-area').querySelector('.ocr-upload-zone').classList.add('hidden');
+    document.getElementById('ocr-preview').classList.remove('hidden');
+    state.ocrFile = file;
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetOCR() {
+  document.getElementById('ocr-upload-area').querySelector('.ocr-upload-zone').classList.remove('hidden');
+  document.getElementById('ocr-preview').classList.add('hidden');
+  document.getElementById('ocr-processing').classList.add('hidden');
+  document.getElementById('ocr-results').classList.add('hidden');
+  document.getElementById('ocr-file-input').value = '';
+  state.ocrFile = null;
+  state.ocrText = null;
+}
+
+async function processOCRImage() {
+  if (!state.ocrFile) return;
+
+  document.getElementById('ocr-preview').classList.add('hidden');
+  document.getElementById('ocr-processing').classList.remove('hidden');
+  document.getElementById('ocr-results').classList.add('hidden');
+
+  try {
+    // Use Tesseract.js for OCR (loaded from CDN)
+    const { createWorker } = Tesseract;
+    const worker = await createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          document.getElementById('ocr-progress').textContent = pct + '%';
+        }
+      }
+    });
+
+    const { data: { text } } = await worker.recognize(state.ocrFile);
+    await worker.terminate();
+
+    state.ocrText = text.trim();
+    document.getElementById('ocr-processing').classList.add('hidden');
+    document.getElementById('ocr-results').classList.remove('hidden');
+
+    // Display extracted text
+    document.getElementById('ocr-text-display').textContent = state.ocrText;
+    document.getElementById('ocr-text-display').contentEditable = 'false';
+    document.getElementById('ocr-text-display').classList.remove('editing');
+
+    // Process extracted text as a question
+    processOCRExtractedText(state.ocrText);
+  } catch (err) {
+    console.error('OCR error:', err);
+    document.getElementById('ocr-processing').innerHTML = `
+      <p style="color:var(--error);">OCR failed: ${escHtml(err.message)}</p>
+      <p class="ocr-hint">Try again with a clearer image, or use the Paste Question tab instead.</p>
+    `;
+  }
+}
+
+function processOCRExtractedText(text) {
+  const parsed = parseQuestionText(text);
+  if (!parsed) {
+    document.getElementById('ocr-answer').innerHTML = `
+      <div class="paste-answer-header"><h3>⚠️ Could Not Parse</h3></div>
+      <p style="color:var(--text-secondary);font-size:13px;">The extracted text doesn't appear to be a complete question with options. Try editing the text below, or paste the question manually in the "Paste Question" tab.</p>
+    `;
+    document.getElementById('ocr-evidence').innerHTML = '';
+    return;
+  }
+
+  const results = evaluateOptions(parsed);
+
+  document.getElementById('ocr-answer').innerHTML = `
+    <div class="paste-answer-header">
+      <h3>📋 Analysis</h3>
+    </div>
+    ${results.verdicts.map(v => `
+      <div class="paste-answer-option ${v.level}">
+        <strong>${v.letter}.</strong> ${escHtml(v.text)}
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">— ${v.explanation}</span>
+      </div>
+    `).join('')}
+    <div style="margin-top:12px;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius);">
+      <strong>Most likely answer:</strong> ${results.bestAnswer}
+    </div>
+  `;
+
+  document.getElementById('ocr-evidence').innerHTML = `
+    <h3>🔍 Evidence from Odoo Documentation</h3>
+    ${results.evidence.length > 0
+      ? results.evidence.slice(0, 5).map(e => `
+        <div class="evidence-item">
+          <div class="evidence-source">${e.module} → ${e.topic}</div>
+          <div class="evidence-text">${e.snippet}</div>
+        </div>
+      `).join('')
+      : '<p style="color:var(--text-muted);font-size:13px;">No clear evidence found in the knowledge base.</p>'}
+  `;
+}
+
+function editOCRText() {
+  const display = document.getElementById('ocr-text-display');
+  const editing = display.contentEditable === 'true';
+  display.contentEditable = editing ? 'false' : 'true';
+  display.classList.toggle('editing', !editing);
+  document.getElementById('btn-ocr-edit').textContent = editing ? 'Edit Text' : 'Reprocess Text';
+
+  if (!editing) {
+    // Reprocess with edited text
+    processOCRExtractedText(display.textContent.trim());
+  }
+}
+
+// ---- Utility ----
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
