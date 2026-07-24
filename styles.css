@@ -990,6 +990,29 @@ mark {
   color: var(--error);
 }
 
+.score-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.score-badge.likely {
+  background: rgba(158, 206, 106, 0.15);
+  color: var(--success);
+}
+
+.score-badge.unlikely {
+  background: rgba(224, 175, 104, 0.15);
+  color: var(--warning);
+}
+
+.score-badge.no-evidence {
+  background: rgba(247, 118, 142, 0.15);
+  color: var(--error);
+}
+
 .paste-evidence {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
