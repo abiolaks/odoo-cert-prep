@@ -412,6 +412,28 @@ body {
   margin-top: 12px;
 }
 
+.exam-hint-result {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.exam-hint-result .hint-correct {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.exam-hint-result .hint-wrong {
+  color: var(--error);
+}
+
+.exam-hint-result .hint-warning {
+  color: var(--warning);
+}
+
 /* ==============================
    Exam Nav
    ============================== */
