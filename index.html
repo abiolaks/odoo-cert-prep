@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Odoo 19 Certification Prep</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-icon">📘</span>
+        <span class="brand-text">Odoo 19<br>Cert Prep</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-tab="exam">
+          <span class="nav-icon">📝</span>
+          <span>Full Exam</span>
+        </button>
+        <button class="nav-btn" data-tab="drill">
+          <span class="nav-icon">🎯</span>
+          <span>Drill Mode</span>
+        </button>
+        <button class="nav-btn" data-tab="knowledge">
+          <span class="nav-icon">📚</span>
+          <span>Knowledge Base</span>
+        </button>
+        <button class="nav-btn" data-tab="search">
+          <span class="nav-icon">🔍</span>
+          <span>Q&A Search</span>
+        </button>
+        <button class="nav-btn" data-tab="history">
+          <span class="nav-icon">📊</span>
+          <span>History</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="exam-info-badge">
+          <div class="exam-info-title">Odoo 19 Functional</div>
+          <div class="exam-info-detail">120 questions · 90 min · 70% to pass</div>
+          <div class="exam-info-detail">+1 correct · −½ wrong · 0 unanswered</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Exam Tab -->
+      <section id="tab-exam" class="tab-content active">
+        <div class="tab-header">
+          <h1>Full Exam Simulator</h1>
+          <p>Simulates the real Odoo 19 Functional Certification exam. 120 questions, 90 minutes, exact same scoring.</p>
+        </div>
+        <div id="exam-container">
+          <div class="exam-start" id="exam-start">
+            <div class="start-card">
+              <h2>Ready to begin?</h2>
+              <div class="start-details">
+                <div class="detail-row"><span>Questions</span><span>120</span></div>
+                <div class="detail-row"><span>Time Limit</span><span>90 minutes</span></div>
+                <div class="detail-row"><span>Scoring</span><span>+1 correct / −½ wrong / 0 unanswered</span></div>
+                <div class="detail-row"><span>Passing Score</span><span>70%</span></div>
+                <div class="detail-row"><span>Modules Covered</span><span>All 18+ modules</span></div>
+              </div>
+              <p class="warning-text">⚠️ Once started, the timer cannot be paused. Choose a quiet time.</p>
+              <button class="btn-primary" id="btn-start-exam">Start Exam</button>
+            </div>
+          </div>
+          <div class="exam-active hidden" id="exam-active">
+            <div class="exam-topbar">
+              <div class="timer" id="exam-timer">90:00</div>
+              <div class="progress-info">
+                <span id="exam-progress-text">Question 0/120</span>
+                <div class="progress-bar"><div class="progress-fill" id="exam-progress-bar"></div></div>
+              </div>
+              <div class="score-tracker">
+                <span>Score: <strong id="exam-score-live">0</strong></span>
+                <span>Answered: <strong id="exam-answered-count">0</strong></span>
+              </div>
+            </div>
+            <div class="question-card" id="exam-question-card">
+              <div class="question-meta">
+                <span class="question-module" id="exam-q-module"></span>
+                <span class="question-topic" id="exam-q-topic"></span>
+              </div>
+              <p class="question-text" id="exam-q-text"></p>
+              <div class="question-options" id="exam-q-options"></div>
+              <div class="question-actions">
+                <button class="btn-secondary" id="btn-skip">Skip (No penalty)</button>
+                <button class="btn-secondary hidden" id="btn-clear">Clear Answer</button>
+              </div>
+              <p class="question-hint" id="exam-q-hint"></p>
+            </div>
+            <div class="exam-nav">
+              <button class="btn-secondary" id="btn-prev" disabled>← Previous</button>
+              <div class="question-dots" id="exam-dots"></div>
+              <button class="btn-secondary" id="btn-next">Next →</button>
+              <button class="btn-danger hidden" id="btn-submit-exam">Submit Exam</button>
+            </div>
+          </div>
+          <div class="exam-results hidden" id="exam-results">
+            <div class="results-card">
+              <h2 id="results-heading">Exam Complete</h2>
+              <div class="results-score" id="results-score">0/120</div>
+              <div class="results-percentage" id="results-percent">0%</div>
+              <div class="results-pass-fail" id="results-passfail"></div>
+              <div class="results-breakdown" id="results-breakdown"></div>
+              <button class="btn-primary" id="btn-review">Review Answers</button>
+              <button class="btn-secondary" id="btn-new-exam">New Exam</button>
+            </div>
+          </div>
+          <div class="exam-review hidden" id="exam-review">
+            <div id="review-list"></div>
+            <button class="btn-primary" id="btn-back-to-results">Back to Results</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Drill Tab -->
+      <section id="tab-drill" class="tab-content">
+        <div class="tab-header">
+          <h1>Drill Mode</h1>
+          <p>Practice specific modules. Choose your module and number of questions.</p>
+        </div>
+        <div id="drill-container">
+          <div class="drill-setup" id="drill-setup">
+            <div class="drill-config">
+              <div class="form-group">
+                <label>Select Module</label>
+                <select id="drill-module">
+                  <option value="all">All Modules (mixed)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Number of Questions</label>
+                <select id="drill-count">
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="drill-show-answers" checked>
+                  Show answers & explanations after each question (learning mode)
+                </label>
+              </div>
+              <button class="btn-primary" id="btn-start-drill">Start Drill</button>
+            </div>
+          </div>
+          <div class="drill-active hidden" id="drill-active">
+            <div class="drill-topbar">
+              <span id="drill-progress">Question 1/20</span>
+              <span>Correct: <strong id="drill-correct-count">0</strong></span>
+            </div>
+            <div class="question-card" id="drill-question-card">
+              <div class="question-meta">
+                <span class="question-module" id="drill-q-module"></span>
+              </div>
+              <p class="question-text" id="drill-q-text"></p>
+              <div class="question-options" id="drill-q-options"></div>
+              <div class="drill-feedback hidden" id="drill-feedback"></div>
+              <div class="question-actions">
+                <button class="btn-primary" id="btn-check-answer">Check Answer</button>
+                <button class="btn-secondary hidden" id="btn-next-drill">Next Question →</button>
+              </div>
+            </div>
+          </div>
+          <div class="drill-results hidden" id="drill-results">
+            <div class="results-card">
+              <h2>Drill Complete</h2>
+              <div class="results-score" id="drill-final-score">0/20</div>
+              <div class="results-percentage" id="drill-final-percent">0%</div>
+              <div class="results-breakdown" id="drill-breakdown"></div>
+              <button class="btn-primary" id="btn-drill-again">Another Drill</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Knowledge Base Tab -->
+      <section id="tab-knowledge" class="tab-content">
+        <div class="tab-header">
+          <h1>Knowledge Base</h1>
+          <p>Structured Odoo 19 documentation. Browse by module or search all topics.</p>
+          <input type="text" class="search-input" id="kb-search" placeholder="Search knowledge base... (e.g., 'fiscal positions', 'removal strategies')">
+        </div>
+        <div id="kb-container" class="kb-grid"></div>
+      </section>
+
+      <!-- Q&A Search Tab -->
+      <section id="tab-search" class="tab-content">
+        <div class="tab-header">
+          <h1>Q&A Search</h1>
+          <p>Ask a question about Odoo 19 and get answers from the documentation.</p>
+          <div class="qa-search-box">
+            <input type="text" class="search-input" id="qa-input" placeholder="e.g., 'How does landed cost affect inventory valuation?'">
+            <button class="btn-primary" id="btn-qa-search">Search</button>
+          </div>
+        </div>
+        <div id="qa-results" class="qa-results"></div>
+      </section>
+
+      <!-- History Tab -->
+      <section id="tab-history" class="tab-content">
+        <div class="tab-header">
+          <h1>Exam History</h1>
+          <p>Your past exam attempts and scores, stored locally in your browser.</p>
+        </div>
+        <div id="history-container">
+          <div id="history-list" class="history-list"></div>
+          <button class="btn-danger" id="btn-clear-history">Clear History</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="data/knowledge-base.js"></script>
+  <script src="data/questions.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
