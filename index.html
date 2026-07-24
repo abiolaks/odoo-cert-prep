@@ -34,6 +34,14 @@
           <span class="nav-icon">🔍</span>
           <span>Q&A Search</span>
         </button>
+        <button class="nav-btn" data-tab="paste">
+          <span class="nav-icon">📋</span>
+          <span>Paste Question</span>
+        </button>
+        <button class="nav-btn" data-tab="ocr">
+          <span class="nav-icon">📸</span>
+          <span>Screenshot OCR</span>
+        </button>
         <button class="nav-btn" data-tab="history">
           <span class="nav-icon">📊</span>
           <span>History</span>
@@ -207,6 +215,73 @@
         <div id="qa-results" class="qa-results"></div>
       </section>
 
+      <!-- Paste Question Tab -->
+      <section id="tab-paste" class="tab-content">
+        <div class="tab-header">
+          <h1>Paste Question</h1>
+          <p>Paste an Odoo exam question with its options and get answers grounded in the documentation.</p>
+        </div>
+        <div class="paste-container">
+          <div class="paste-input-area">
+            <textarea id="paste-input" class="paste-textarea" placeholder="Paste the full question here, including all answer options...
+
+Example:
+Which of the following are supported tax features in Odoo 19 Accounting?
+A) Cash basis taxes
+B) Withholding taxes
+C) VAT verification (VIES)
+D) Progressive income tax brackets"></textarea>
+            <div class="paste-actions">
+              <button class="btn-primary" id="btn-paste-answer">Get Answer</button>
+              <button class="btn-secondary" id="btn-paste-clear">Clear</button>
+            </div>
+          </div>
+          <div class="paste-results hidden" id="paste-results">
+            <div class="paste-question-display" id="paste-question-display"></div>
+            <div class="paste-answer" id="paste-answer"></div>
+            <div class="paste-evidence" id="paste-evidence"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screenshot OCR Tab -->
+      <section id="tab-ocr" class="tab-content">
+        <div class="tab-header">
+          <h1>Screenshot OCR</h1>
+          <p>Upload or paste a screenshot of an Odoo exam question, and we'll extract the text and find the answer.</p>
+          <p class="tab-note">🔒 All processing happens in your browser — no data is uploaded anywhere.</p>
+        </div>
+        <div class="ocr-container">
+          <div class="ocr-upload-area" id="ocr-upload-area">
+            <div class="ocr-upload-zone" id="ocr-drop-zone">
+              <div class="ocr-upload-icon">📸</div>
+              <p>Drag & drop a screenshot here, paste from clipboard (Ctrl+V), or click to select</p>
+              <p class="ocr-hint">Supports PNG, JPG, GIF files</p>
+              <input type="file" id="ocr-file-input" accept="image/*" class="hidden">
+            </div>
+            <div class="ocr-preview hidden" id="ocr-preview">
+              <img id="ocr-preview-img" alt="Screenshot preview">
+              <button class="btn-secondary" id="btn-ocr-reset">Remove & Upload New</button>
+              <button class="btn-primary" id="btn-ocr-process">Extract Text & Answer</button>
+            </div>
+          </div>
+          <div class="ocr-processing hidden" id="ocr-processing">
+            <div class="ocr-spinner"></div>
+            <p>Extracting text from image... <span id="ocr-progress">0%</span></p>
+            <p class="ocr-hint">This may take 10-30 seconds depending on image complexity.</p>
+          </div>
+          <div class="ocr-results hidden" id="ocr-results">
+            <div class="ocr-extracted-text">
+              <h3>Extracted Text</h3>
+              <div class="ocr-text-display" id="ocr-text-display"></div>
+              <button class="btn-secondary" id="btn-ocr-edit">Edit Text</button>
+            </div>
+            <div class="paste-answer" id="ocr-answer"></div>
+            <div class="paste-evidence" id="ocr-evidence"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- History Tab -->
       <section id="tab-history" class="tab-content">
         <div class="tab-header">
@@ -223,6 +298,8 @@
 
   <script src="data/knowledge-base.js"></script>
   <script src="data/questions.js"></script>
+  <script src="data/question-refs.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
