@@ -265,9 +265,19 @@ D) Progressive income tax brackets"></textarea>
           <div class="ocr-upload-area" id="ocr-upload-area">
             <div class="ocr-upload-zone" id="ocr-drop-zone">
               <div class="ocr-upload-icon">📸</div>
-              <p>Drag & drop a screenshot here, paste from clipboard (Ctrl+V), or click to select</p>
-              <p class="ocr-hint">Supports PNG, JPG, GIF files</p>
+              <p>Upload a screenshot of an Odoo exam question</p>
+              <div class="ocr-upload-buttons">
+                <button class="btn-primary ocr-camera-btn" id="btn-ocr-camera">
+                  <span>📷</span> Take Photo
+                </button>
+                <button class="btn-secondary ocr-gallery-btn" id="btn-ocr-gallery">
+                  <span>🖼️</span> Choose from Gallery
+                </button>
+              </div>
+              <p class="ocr-hint">Or drag & drop, or paste from clipboard (Ctrl+V)</p>
+              <p class="ocr-hint">Supports PNG, JPG, GIF — processing is device-only</p>
               <input type="file" id="ocr-file-input" accept="image/*" class="hidden">
+              <input type="file" id="ocr-camera-input" accept="image/*" capture="environment" class="hidden">
             </div>
             <div class="ocr-preview hidden" id="ocr-preview">
               <img id="ocr-preview-img" alt="Screenshot preview">
